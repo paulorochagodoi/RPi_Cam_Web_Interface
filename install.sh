@@ -325,6 +325,11 @@ sudo chmod 664 /etc/motion/motion.conf
 
 fn_autostart ()
 {
+# Create /etc/rc.local if absent (not present by default on Debian 12+)
+if [ ! -f /etc/rc.local ]; then
+   sudo bash -c 'printf "#!/bin/sh -e\n\nexit 0\n" > /etc/rc.local'
+   sudo chmod 755 /etc/rc.local
+fi
 tmpfile=$(mktemp)
 sudo sed '/#START/,/#END/d' /etc/rc.local > "$tmpfile" && sudo mv "$tmpfile" /etc/rc.local
 # Remove to growing plank lines.
@@ -337,7 +342,11 @@ if [ "$autostart" == "yes" ]; then
 mkdir -p /dev/shm/mjpeg
 chown www-data:www-data /dev/shm/mjpeg
 chmod 777 /dev/shm/mjpeg
-sleep 4;su -c 'raspimjpeg > /dev/null 2>&1 &' www-data
+if grep -q 'usb_cam="yes"' /etc/rpi_cam_config 2>/dev/null || grep -q "usb_cam=\"yes\"" $(dirname $(readlink -f $0))/config.txt 2>/dev/null; then
+  sleep 4;bash $(dirname $(readlink -f $0))/usb_cam.sh start > /dev/null 2>&1
+else
+  sleep 4;su -c 'raspimjpeg > /dev/null 2>&1 &' www-data
+fi
 if [ -e /etc/debian_version ]; then
   sleep 4;su -c 'php /var/www$rpicamdir/schedule.php > /dev/null 2>&1 &' www-data
 else
