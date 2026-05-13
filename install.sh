@@ -61,6 +61,9 @@ elif [ $VERSION -eq 12 ]; then
 #   sudo grep -qxF 'start_x=1' /boot/config.txt || sudo sed -i '$ a start_x=1' /boot/config.txt
 #   sudo grep -qxF 'gpu_mem=128' /boot/config.txt || sudo sed -i '$ a gpu_mem=128' /boot/config.txt
    sudo mkdir -p /opt/vc/bin
+elif [ $VERSION -eq 13 ]; then
+   phpversion=8.4
+   sudo mkdir -p /opt/vc/bin
 else
    phpversion=7.0
 fi
@@ -120,7 +123,7 @@ if [ $# -eq 0 ] || [ "$1" != "q" ]; then
    "User:(blank=nologin)"  5 1   "$user"        5 32 15 0  \
    "Password:"             6 1   "$webpasswd"   6 32 15 0  \
    "jpglink:(yes/no)"      7 1   "$jpglink"     7 32 15 0  \
-   "php:(stretch 7.0,buster 7.3)"           8 1   "$phpversion"  8 32 15 0  \
+   "php:(7.0,7.3,7.4,8.2,8.4)"              8 1   "$phpversion"  8 32 15 0  \
    2>&1 1>&3 | {
       read -r rpicamdir
       read -r autostart
@@ -250,6 +253,10 @@ if [[ "$phpversion" == "7.4" ]]; then
    sed -i "s/\/var\/run\/php5-fpm\.sock;/\/run\/php\/php7.4-fpm\.sock;/g" $aconf
 elif [[ "$phpversion" == "7.3" ]]; then
    sed -i "s/\/var\/run\/php5-fpm\.sock;/\/run\/php\/php7.3-fpm\.sock;/g" $aconf
+elif [[ "$phpversion" == "8.2" ]]; then
+   sed -i "s/\/var\/run\/php5-fpm\.sock;/\/run\/php\/php8.2-fpm\.sock;/g" $aconf
+elif [[ "$phpversion" == "8.4" ]]; then
+   sed -i "s/\/var\/run\/php5-fpm\.sock;/\/run\/php\/php8.4-fpm\.sock;/g" $aconf
 fi
 sudo sed -i -E "s/(listen.+?)80/\1$webport/g" $aconf
 # following line sets root url to direct subfolder. This is inconsistent with other usage.
@@ -269,11 +276,7 @@ if [ "$NGINX_DISABLE_LOGGING" != "" ]; then
 fi
 
 # Configure php-apc
-if [[ "$phpversion" == "7.3" ]]; then
-	phpnv=/etc/php/7.3
-else
-	phpnv=/etc/php/$phpversion
-fi
+phpnv=/etc/php/$phpversion
 sudo sh -c "echo \"cgi.fix_pathinfo = 0;\" >> $phpnv/fpm/php.ini"
 sudo mkdir $phpnv/conf.d >/dev/null 2>&1
 sudo cp etc/php5/apc.ini $phpnv/conf.d/20-apc.ini
@@ -372,11 +375,7 @@ if [ -e /var/www$rpicamdir/index.html ]; then
    sudo rm /var/www$rpicamdir/index.html
 fi
 
-if [[ "$phpversion" == "7.3" ]]; then
-   phpv=php7.3
-else
-   phpv=php$phpversion
-fi
+phpv=php$phpversion
 
 if [ "$webserver" == "apache" ]; then
    sudo apt-get install -y apache2 $phpv $phpv-cli libapache2-mod-$phpv gpac motion zip gstreamer1.0-tools
