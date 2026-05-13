@@ -258,15 +258,8 @@ else
    sed -i "s/auth_basic\ .*/auth_basic \"Restricted\";/g" $aconf
    sed -i "s/#auth_basic_user_file/\ auth_basic_user_file/g" $aconf
 fi
-if [[ "$phpversion" == "7.4" ]]; then
-   sed -i "s/\/var\/run\/php5-fpm\.sock;/\/run\/php\/php7.4-fpm\.sock;/g" $aconf
-elif [[ "$phpversion" == "7.3" ]]; then
-   sed -i "s/\/var\/run\/php5-fpm\.sock;/\/run\/php\/php7.3-fpm\.sock;/g" $aconf
-elif [[ "$phpversion" == "8.2" ]]; then
-   sed -i "s/\/var\/run\/php5-fpm\.sock;/\/run\/php\/php8.2-fpm\.sock;/g" $aconf
-elif [[ "$phpversion" == "8.4" ]]; then
-   sed -i "s/\/var\/run\/php5-fpm\.sock;/\/run\/php\/php8.4-fpm\.sock;/g" $aconf
-fi
+# Replace legacy php5-fpm socket with the correct versioned socket for any PHP version
+sed -i "s|/var/run/php5-fpm\.sock|/run/php/php${phpversion}-fpm.sock|g" $aconf
 sudo sed -i -E "s/(listen.+?)80/\1$webport/g" $aconf
 # following line sets root url to direct subfolder. This is inconsistent with other usage.
 #sudo sed -i -E "s/root \/var\/www/root \/var\/www$rpicamdirEsc/" $aconf
