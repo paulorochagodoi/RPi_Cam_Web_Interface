@@ -60,8 +60,8 @@ stop_video_proc() {
 
 try_ffmpeg() {
     # Try a specific ffmpeg command; return 0 if cam.jpg is created within 4s
-    log "Trying: ffmpeg $*"
-    ffmpeg "$@" > "$PREVIEW_LOG" 2>&1 &
+    log "Trying: ffmpeg -y $*"
+    ffmpeg -y "$@" > "$PREVIEW_LOG" 2>&1 &
     local pid=$!
     echo "$pid" > "$PREVIEW_PID_FILE"
 
@@ -102,29 +102,25 @@ start_preview() {
 
     OUTPUT_ARGS=(-vf "fps=fps=5" -q:v 5 -update 1 -f image2 "$SHM_DIR/cam.jpg")
 
-    # Strategy 1: MJPEG input at requested resolution
-    if v4l2-ctl --device="$USB_DEVICE" --list-formats 2>/dev/null | grep -qi "mjpeg\|mjpg"; then
-        log "Camera supports MJPEG"
+    SUPPORTS_MJPEG=0
+    v4l2-ctl --device="$USB_DEVICE" --list-formats 2>/dev/null | grep -qi "mjpeg\|mjpg" && SUPPORTS_MJPEG=1
+
+    # Strategy 1: YUYV at requested resolution (most common for USB webcams)
+    log "Trying YUYV at ${USB_WIDTH}x${USB_HEIGHT}@${USB_FPS}fps"
+    try_ffmpeg -f v4l2 \
+        -video_size "${USB_WIDTH}x${USB_HEIGHT}" -framerate "$USB_FPS" \
+        -i "$USB_DEVICE" "${OUTPUT_ARGS[@]}" && { echo "ready" > "$STATUS_FILE"; return 0; }
+
+    # Strategy 2: MJPEG at requested resolution (better performance if supported)
+    if [ "$SUPPORTS_MJPEG" -eq 1 ]; then
+        log "Trying MJPEG at ${USB_WIDTH}x${USB_HEIGHT}@${USB_FPS}fps"
         try_ffmpeg -f v4l2 -input_format mjpeg \
             -video_size "${USB_WIDTH}x${USB_HEIGHT}" -framerate "$USB_FPS" \
             -i "$USB_DEVICE" "${OUTPUT_ARGS[@]}" && { echo "ready" > "$STATUS_FILE"; return 0; }
     fi
 
-    # Strategy 2: YUYV at requested resolution
-    log "Trying YUYV at ${USB_WIDTH}x${USB_HEIGHT}"
-    try_ffmpeg -f v4l2 \
-        -video_size "${USB_WIDTH}x${USB_HEIGHT}" -framerate "$USB_FPS" \
-        -i "$USB_DEVICE" "${OUTPUT_ARGS[@]}" && { echo "ready" > "$STATUS_FILE"; return 0; }
-
-    # Strategy 3: MJPEG without specifying resolution (let camera decide)
-    if v4l2-ctl --device="$USB_DEVICE" --list-formats 2>/dev/null | grep -qi "mjpeg\|mjpg"; then
-        log "Trying MJPEG with auto resolution"
-        try_ffmpeg -f v4l2 -input_format mjpeg \
-            -i "$USB_DEVICE" "${OUTPUT_ARGS[@]}" && { echo "ready" > "$STATUS_FILE"; return 0; }
-    fi
-
-    # Strategy 4: Fully auto — let ffmpeg negotiate everything
-    log "Trying fully automatic format negotiation"
+    # Strategy 3: Auto resolution (camera decides)
+    log "Trying auto resolution"
     try_ffmpeg -f v4l2 -i "$USB_DEVICE" "${OUTPUT_ARGS[@]}" && { echo "ready" > "$STATUS_FILE"; return 0; }
 
     log "ERROR: All strategies failed. Check $PREVIEW_LOG for details."
