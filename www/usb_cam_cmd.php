@@ -8,7 +8,7 @@ require_once(BASE_DIR . '/config.php');
 
 header('Content-Type: application/json');
 
-$allowed_commands = ['start', 'stop', 'restart', 'capture_image', 'start_video', 'stop_video'];
+$allowed_commands = ['start', 'stop', 'restart', 'capture_image', 'start_video', 'stop_video', 'log'];
 
 $cmd = isset($_GET['cmd']) ? trim($_GET['cmd']) : '';
 

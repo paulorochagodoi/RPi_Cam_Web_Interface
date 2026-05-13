@@ -604,6 +604,13 @@
                            <td>Status:</td>
                            <td><span id="usb_cam_status">-</span></td>
                         </tr>
+                        <tr>
+                           <td>Log:</td>
+                           <td>
+                              <input type="button" value="Show ffmpeg log" class="btn btn-default" onclick="usb_cam_show_log();">
+                              <pre id="usb_cam_log" style="display:none;max-height:200px;overflow-y:auto;font-size:11px;background:#1a1a1a;color:#0f0;padding:6px;margin-top:4px;"></pre>
+                           </td>
+                        </tr>
                      </table>
                   </div>
                </div>
@@ -767,6 +774,22 @@
             document.getElementById('usb_vid_btn').value = 'Start Video';
             document.getElementById('usb_vid_btn').className = 'btn btn-primary';
          }
+      }
+
+      function usb_cam_show_log() {
+         var logEl = document.getElementById('usb_cam_log');
+         var xhr = new XMLHttpRequest();
+         xhr.open('GET', 'usb_cam_cmd.php?cmd=log', true);
+         xhr.onload = function() {
+            try {
+               var resp = JSON.parse(xhr.responseText);
+               logEl.textContent = resp.output || '(empty)';
+            } catch(e) {
+               logEl.textContent = xhr.responseText;
+            }
+            logEl.style.display = 'block';
+         };
+         xhr.send();
       }
 
       function usb_cam_detect_devices() {
