@@ -482,6 +482,15 @@ if [ -e /var/www$rpicamdir/uconfig ]; then
    sudo chown www-data:www-data /var/www$rpicamdir/uconfig
 fi
 
+# Install usb_cam.sh to a fixed location so the web interface can call it,
+# and store config.txt in /etc/rpi_cam_web_interface/ so the script finds it.
+SRCDIR="$(dirname "$(readlink -f "$0")")"
+sudo mkdir -p /etc/rpi_cam_web_interface
+sudo cp "$SRCDIR/config.txt" /etc/rpi_cam_web_interface/config.txt
+sudo chmod 644 /etc/rpi_cam_web_interface/config.txt
+sudo cp "$SRCDIR/usb_cam.sh" /usr/local/bin/usb_cam.sh
+sudo chmod 755 /usr/local/bin/usb_cam.sh
+
 fn_motion
 fn_autostart
 

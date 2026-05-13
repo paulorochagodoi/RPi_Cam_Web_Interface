@@ -7,7 +7,12 @@ require_once(BASE_DIR . '/config.php');
 
 header('Content-Type: application/json');
 
-$config_file = dirname(BASE_DIR) . '/config.txt';
+// Config files to update: project config.txt (may not exist in production)
+// and the installed copy used by usb_cam.sh at runtime.
+$config_files = [
+    '/etc/rpi_cam_web_interface/config.txt',
+    dirname(BASE_DIR) . '/config.txt',
+];
 
 $allowed_keys = ['usb_cam', 'usb_cam_device', 'usb_cam_width', 'usb_cam_height', 'usb_cam_fps'];
 
@@ -36,26 +41,33 @@ if (!preg_match('/^[a-zA-Z0-9\/_.:-]*$/', $value)) {
     exit;
 }
 
-if (!file_exists($config_file)) {
-    echo json_encode(['status' => 'error', 'message' => 'config.txt not found']);
-    exit;
-}
+$saved = false;
+foreach ($config_files as $config_file) {
+    if (!file_exists($config_file)) continue;
 
-$lines = file($config_file, FILE_IGNORE_NEW_LINES);
-$found = false;
-foreach ($lines as &$line) {
-    if (preg_match('/^' . preg_quote($key, '/') . '=/', $line)) {
-        $line = $key . '="' . $value . '"';
-        $found = true;
-        break;
+    $lines = file($config_file, FILE_IGNORE_NEW_LINES);
+    $found = false;
+    foreach ($lines as &$line) {
+        if (preg_match('/^' . preg_quote($key, '/') . '=/', $line)) {
+            $line = $key . '="' . $value . '"';
+            $found = true;
+            break;
+        }
+    }
+    unset($line);
+
+    if (!$found) {
+        $lines[] = $key . '="' . $value . '"';
+    }
+
+    if (@file_put_contents($config_file, implode("\n", $lines) . "\n") !== false) {
+        $saved = true;
     }
 }
-unset($line);
 
-if (!$found) {
-    $lines[] = $key . '="' . $value . '"';
+if (!$saved) {
+    echo json_encode(['status' => 'error', 'message' => 'Could not write to any config file']);
+    exit;
 }
-
-file_put_contents($config_file, implode("\n", $lines) . "\n");
 
 echo json_encode(['status' => 'ok', 'key' => $key, 'value' => $value]);

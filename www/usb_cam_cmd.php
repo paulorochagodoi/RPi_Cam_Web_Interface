@@ -18,9 +18,9 @@ if (!in_array($cmd, $allowed_commands, true)) {
     exit;
 }
 
-$script = escapeshellarg(dirname(BASE_DIR) . '/usb_cam.sh');
+$script = '/usr/local/bin/usb_cam.sh';
 $safe_cmd = escapeshellarg($cmd);
 
-$output = shell_exec("sudo bash $script $safe_cmd 2>&1");
+$output = shell_exec("sudo bash " . escapeshellarg($script) . " $safe_cmd 2>&1");
 
 echo json_encode(['status' => 'ok', 'command' => $cmd, 'output' => $output]);

@@ -7,7 +7,17 @@
 SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
 cd "$SCRIPT_DIR"
 
-source ./config.txt
+# config.txt lives next to this script in the project dir.
+# When installed via a wrapper at /usr/local/bin, SCRIPT_DIR may point
+# there; fall back to the path stored by the installer.
+if [ -f "$SCRIPT_DIR/config.txt" ]; then
+   source "$SCRIPT_DIR/config.txt"
+elif [ -f "/etc/rpi_cam_web_interface/config.txt" ]; then
+   source "/etc/rpi_cam_web_interface/config.txt"
+else
+   echo "[usb_cam] ERROR: config.txt not found" >&2
+   exit 1
+fi
 
 USB_DEVICE="${usb_cam_device:-/dev/video0}"
 USB_WIDTH="${usb_cam_width:-640}"
