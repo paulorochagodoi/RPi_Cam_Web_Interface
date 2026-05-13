@@ -87,6 +87,11 @@ if [ ! -e ./config.txt ]; then
       sudo echo "autostart=\"yes\"" >> ./config.txt
       sudo echo "jpglink=\"no\"" >> ./config.txt
       sudo echo "phpversion=\"$phpversion\"" >> ./config.txt
+      sudo echo "usb_cam=\"no\"" >> ./config.txt
+      sudo echo "usb_cam_device=\"/dev/video0\"" >> ./config.txt
+      sudo echo "usb_cam_width=\"640\"" >> ./config.txt
+      sudo echo "usb_cam_height=\"480\"" >> ./config.txt
+      sudo echo "usb_cam_fps=\"15\"" >> ./config.txt
       sudo echo "" >> ./config.txt
       sudo chmod 664 ./config.txt
 fi
@@ -386,6 +391,9 @@ elif [ "$webserver" == "lighttpd" ]; then
    if [ $? -ne 0 ]; then exit; fi
    fn_lighttpd
 fi
+
+# Install USB camera support packages (ffmpeg and v4l-utils)
+sudo apt-get install -y ffmpeg v4l-utils 2>/dev/null || true
 
 #Make sure user www-data has bash shell
 sudo sed -i "s/^www-data:x.*/www-data:x:33:33:www-data:\/var\/www:\/bin\/bash/g" /etc/passwd
