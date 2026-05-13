@@ -244,8 +244,7 @@ cp $aconf.1 $aconf
 if [ -e "\/$aconf" ]; then
    sudo rm "\/$aconf"
 fi
-#uncomment next line if wishing to always access by http://ip as the root
-#sudo sed -i "s:root /var/www;:root /var/www$rpicamdirEsc;:g" $aconf 
+sudo sed -i "s:root /var/www;:root /var/www$rpicamdirEsc;:g" $aconf
 sudo mv /etc/nginx/sites-available/*default* etc/nginx/sites-available/ >/dev/null 2>&1
 #remove link file as nginx now errors if link invalid
 sudo rm /etc/nginx/sites-enabled/*default* >/dev/null 2>&1
@@ -261,8 +260,6 @@ fi
 # Replace legacy php5-fpm socket with the correct versioned socket for any PHP version
 sed -i "s|/var/run/php5-fpm\.sock|/run/php/php${phpversion}-fpm.sock|g" $aconf
 sudo sed -i -E "s/(listen.+?)80/\1$webport/g" $aconf
-# following line sets root url to direct subfolder. This is inconsistent with other usage.
-#sudo sed -i -E "s/root \/var\/www/root \/var\/www$rpicamdirEsc/" $aconf
 sudo mv $aconf /$aconf
 sudo chmod 644 /$aconf
 if [ ! -e /etc/nginx/sites-enabled/rpicam ]; then
