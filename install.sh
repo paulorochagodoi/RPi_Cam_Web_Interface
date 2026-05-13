@@ -68,6 +68,15 @@ else
    phpversion=7.0
 fi
 
+# On 64-bit ARM (aarch64) raspimjpeg is not available (32-bit only),
+# so default to USB camera mode.
+ARCH=$(uname -m)
+if [ "$ARCH" == "aarch64" ]; then
+   usb_cam_default="yes"
+else
+   usb_cam_default="no"
+fi
+
 # Terminal colors
 color_red="tput setaf 1"
 color_green="tput setaf 2"
@@ -90,7 +99,7 @@ if [ ! -e ./config.txt ]; then
       sudo echo "autostart=\"yes\"" >> ./config.txt
       sudo echo "jpglink=\"no\"" >> ./config.txt
       sudo echo "phpversion=\"$phpversion\"" >> ./config.txt
-      sudo echo "usb_cam=\"no\"" >> ./config.txt
+      sudo echo "usb_cam=\"$usb_cam_default\"" >> ./config.txt
       sudo echo "usb_cam_device=\"/dev/video0\"" >> ./config.txt
       sudo echo "usb_cam_width=\"640\"" >> ./config.txt
       sudo echo "usb_cam_height=\"480\"" >> ./config.txt
@@ -342,7 +351,7 @@ if [ "$autostart" == "yes" ]; then
 mkdir -p /dev/shm/mjpeg
 chown www-data:www-data /dev/shm/mjpeg
 chmod 777 /dev/shm/mjpeg
-if grep -q 'usb_cam="yes"' /etc/rpi_cam_config 2>/dev/null || grep -q "usb_cam=\"yes\"" $(dirname $(readlink -f $0))/config.txt 2>/dev/null; then
+if [ "\$(uname -m)" = "aarch64" ] || grep -q 'usb_cam="yes"' $(dirname $(readlink -f $0))/config.txt 2>/dev/null; then
   sleep 4;bash $(dirname $(readlink -f $0))/usb_cam.sh start > /dev/null 2>&1
 else
   sleep 4;su -c 'raspimjpeg > /dev/null 2>&1 &' www-data

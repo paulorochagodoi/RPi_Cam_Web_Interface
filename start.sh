@@ -53,7 +53,7 @@ sudo mkdir -p /dev/shm/mjpeg
 sudo chown www-data:www-data /dev/shm/mjpeg
 sudo chmod 777 /dev/shm/mjpeg
 
-if [ "${usb_cam}" == "yes" ]; then
+if [ "${usb_cam}" == "yes" ] || [ "$(uname -m)" == "aarch64" ]; then
    sleep 1;sudo bash $(dirname $(readlink -f $0))/usb_cam.sh start
 else
    sleep 1;sudo su -c 'raspimjpeg > /dev/null &' www-data
