@@ -541,6 +541,80 @@
                   </div>
                </div>
             </div>
+            <div class="panel panel-default">
+               <div class="panel-heading">
+                  <h2 class="panel-title">
+                     <a data-toggle="collapse" data-parent="#accordion" href="#collapseUSB">USB Camera</a>
+                  </h2>
+               </div>
+               <div id="collapseUSB" class="panel-collapse collapse">
+                  <div class="panel-body">
+                     <table class="settingsTable">
+                        <tr>
+                           <td>USB Camera:</td>
+                           <td>
+                              <select id="usb_cam_enabled" onchange="usb_cam_set_enabled(this.value)">
+                                 <option value="no" <?php if(empty($config['usb_cam']) || $config['usb_cam'] != 'yes') echo 'selected'; ?>>Disabled (use CSI camera)</option>
+                                 <option value="yes" <?php if(!empty($config['usb_cam']) && $config['usb_cam'] == 'yes') echo 'selected'; ?>>Enabled (use USB camera)</option>
+                              </select>
+                           </td>
+                        </tr>
+                        <tr>
+                           <td>Device:</td>
+                           <td>
+                              <select id="usb_cam_device" onchange="usb_cam_save_setting('usb_cam_device', this.value)">
+                                 <?php
+                                    $devices = glob('/dev/video*');
+                                    if(empty($devices)) $devices = ['/dev/video0'];
+                                    $current_dev = !empty($config['usb_cam_device']) ? $config['usb_cam_device'] : '/dev/video0';
+                                    foreach($devices as $dev) {
+                                       $sel = ($dev == $current_dev) ? 'selected' : '';
+                                       echo "<option value=\"$dev\" $sel>$dev</option>";
+                                    }
+                                 ?>
+                              </select>
+                              &nbsp;<input type="button" value="Detect devices" onclick="usb_cam_detect_devices();">
+                           </td>
+                        </tr>
+                        <tr>
+                           <td>Resolution:</td>
+                           <td>
+                              Width: <input type="number" id="usb_cam_width" size="5" value="<?php echo !empty($config['usb_cam_width']) ? $config['usb_cam_width'] : '640'; ?>">
+                              &nbsp;x&nbsp;
+                              Height: <input type="number" id="usb_cam_height" size="5" value="<?php echo !empty($config['usb_cam_height']) ? $config['usb_cam_height'] : '480'; ?>">
+                              &nbsp;<input type="button" value="OK" onclick="usb_cam_save_resolution();">
+                           </td>
+                        </tr>
+                        <tr>
+                           <td>Frame Rate (fps):</td>
+                           <td>
+                              <input type="number" id="usb_cam_fps" size="4" min="1" max="60" value="<?php echo !empty($config['usb_cam_fps']) ? $config['usb_cam_fps'] : '15'; ?>">
+                              &nbsp;<input type="button" value="OK" onclick="usb_cam_save_setting('usb_cam_fps', document.getElementById('usb_cam_fps').value);">
+                           </td>
+                        </tr>
+                        <tr>
+                           <td>Controls:</td>
+                           <td>
+                              <input type="button" value="Restart Stream" class="btn btn-primary" onclick="usb_cam_cmd('restart');">
+                              &nbsp;<input type="button" value="Capture Image" class="btn btn-primary" onclick="usb_cam_cmd('capture_image');">
+                              &nbsp;<input type="button" id="usb_vid_btn" value="Start Video" class="btn btn-primary" onclick="usb_cam_toggle_video();">
+                           </td>
+                        </tr>
+                        <tr>
+                           <td>Status:</td>
+                           <td><span id="usb_cam_status">-</span></td>
+                        </tr>
+                        <tr>
+                           <td>Log:</td>
+                           <td>
+                              <input type="button" value="Show ffmpeg log" class="btn btn-default" onclick="usb_cam_show_log();">
+                              <pre id="usb_cam_log" style="display:none;max-height:200px;overflow-y:auto;font-size:11px;background:#1a1a1a;color:#0f0;padding:6px;margin-top:4px;"></pre>
+                           </td>
+                        </tr>
+                     </table>
+                  </div>
+               </div>
+            </div>
             <div class="panel panel-default" <?php  if($config['motion_external'] == '1') echo "style ='display:none;'"; ?>>
                <div class="panel-heading">
                   <h2 class="panel-title">
@@ -650,5 +724,97 @@
          </div>
       </div>
       <?php if ($debugString != "") echo "$debugString<br>"; ?>
+      <script type="text/javascript">
+      var usb_cam_recording = false;
+
+      function usb_cam_cmd(cmd) {
+         var xhr = new XMLHttpRequest();
+         xhr.open('GET', 'usb_cam_cmd.php?cmd=' + encodeURIComponent(cmd), true);
+         xhr.onload = function() {
+            try {
+               var resp = JSON.parse(xhr.responseText);
+               document.getElementById('usb_cam_status').textContent = 'Command "' + cmd + '": ' + resp.status;
+            } catch(e) {
+               document.getElementById('usb_cam_status').textContent = 'Error: ' + xhr.responseText;
+            }
+         };
+         xhr.send();
+      }
+
+      function usb_cam_save_setting(key, value) {
+         var xhr = new XMLHttpRequest();
+         xhr.open('GET', 'usb_cam_config.php?key=' + encodeURIComponent(key) + '&value=' + encodeURIComponent(value), true);
+         xhr.onload = function() {
+            document.getElementById('usb_cam_status').textContent = 'Setting saved. Restart stream to apply.';
+         };
+         xhr.send();
+      }
+
+      function usb_cam_save_resolution() {
+         var w = document.getElementById('usb_cam_width').value;
+         var h = document.getElementById('usb_cam_height').value;
+         usb_cam_save_setting('usb_cam_width', w);
+         usb_cam_save_setting('usb_cam_height', h);
+      }
+
+      function usb_cam_set_enabled(val) {
+         usb_cam_save_setting('usb_cam', val);
+         document.getElementById('usb_cam_status').textContent = 'USB camera ' + (val === 'yes' ? 'enabled' : 'disabled') + '. Restart system to apply.';
+      }
+
+      function usb_cam_toggle_video() {
+         if (!usb_cam_recording) {
+            usb_cam_cmd('start_video');
+            usb_cam_recording = true;
+            document.getElementById('usb_vid_btn').value = 'Stop Video';
+            document.getElementById('usb_vid_btn').className = 'btn btn-danger';
+         } else {
+            usb_cam_cmd('stop_video');
+            usb_cam_recording = false;
+            document.getElementById('usb_vid_btn').value = 'Start Video';
+            document.getElementById('usb_vid_btn').className = 'btn btn-primary';
+         }
+      }
+
+      function usb_cam_show_log() {
+         var logEl = document.getElementById('usb_cam_log');
+         var xhr = new XMLHttpRequest();
+         xhr.open('GET', 'usb_cam_cmd.php?cmd=log', true);
+         xhr.onload = function() {
+            try {
+               var resp = JSON.parse(xhr.responseText);
+               logEl.textContent = resp.output || '(empty)';
+            } catch(e) {
+               logEl.textContent = xhr.responseText;
+            }
+            logEl.style.display = 'block';
+         };
+         xhr.send();
+      }
+
+      function usb_cam_detect_devices() {
+         var xhr = new XMLHttpRequest();
+         xhr.open('GET', 'usb_cam_config.php?action=list_devices', true);
+         xhr.onload = function() {
+            try {
+               var resp = JSON.parse(xhr.responseText);
+               var sel = document.getElementById('usb_cam_device');
+               var current = sel.value;
+               sel.innerHTML = '';
+               resp.devices.forEach(function(dev) {
+                  var opt = document.createElement('option');
+                  opt.value = dev;
+                  opt.textContent = dev;
+                  if (dev === current) opt.selected = true;
+                  sel.appendChild(opt);
+               });
+               document.getElementById('usb_cam_status').textContent = 'Found ' + resp.devices.length + ' device(s).';
+            } catch(e) {
+               document.getElementById('usb_cam_status').textContent = 'Detection failed.';
+            }
+         };
+         xhr.send();
+      }
+      </script>
    </body>
 </html>

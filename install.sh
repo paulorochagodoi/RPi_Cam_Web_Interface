@@ -61,8 +61,20 @@ elif [ $VERSION -eq 12 ]; then
 #   sudo grep -qxF 'start_x=1' /boot/config.txt || sudo sed -i '$ a start_x=1' /boot/config.txt
 #   sudo grep -qxF 'gpu_mem=128' /boot/config.txt || sudo sed -i '$ a gpu_mem=128' /boot/config.txt
    sudo mkdir -p /opt/vc/bin
+elif [ $VERSION -eq 13 ]; then
+   phpversion=8.4
+   sudo mkdir -p /opt/vc/bin
 else
    phpversion=7.0
+fi
+
+# On 64-bit ARM (aarch64) raspimjpeg is not available (32-bit only),
+# so default to USB camera mode.
+ARCH=$(uname -m)
+if [ "$ARCH" == "aarch64" ]; then
+   usb_cam_default="yes"
+else
+   usb_cam_default="no"
 fi
 
 # Terminal colors
@@ -87,6 +99,11 @@ if [ ! -e ./config.txt ]; then
       sudo echo "autostart=\"yes\"" >> ./config.txt
       sudo echo "jpglink=\"no\"" >> ./config.txt
       sudo echo "phpversion=\"$phpversion\"" >> ./config.txt
+      sudo echo "usb_cam=\"$usb_cam_default\"" >> ./config.txt
+      sudo echo "usb_cam_device=\"/dev/video0\"" >> ./config.txt
+      sudo echo "usb_cam_width=\"640\"" >> ./config.txt
+      sudo echo "usb_cam_height=\"480\"" >> ./config.txt
+      sudo echo "usb_cam_fps=\"15\"" >> ./config.txt
       sudo echo "" >> ./config.txt
       sudo chmod 664 ./config.txt
 fi
@@ -115,7 +132,7 @@ if [ $# -eq 0 ] || [ "$1" != "q" ]; then
    "User:(blank=nologin)"  5 1   "$user"        5 32 15 0  \
    "Password:"             6 1   "$webpasswd"   6 32 15 0  \
    "jpglink:(yes/no)"      7 1   "$jpglink"     7 32 15 0  \
-   "php:(stretch 7.0,buster 7.3)"           8 1   "$phpversion"  8 32 15 0  \
+   "php:(7.0,7.3,7.4,8.2,8.4)"              8 1   "$phpversion"  8 32 15 0  \
    2>&1 1>&3 | {
       read -r rpicamdir
       read -r autostart
@@ -227,8 +244,7 @@ cp $aconf.1 $aconf
 if [ -e "\/$aconf" ]; then
    sudo rm "\/$aconf"
 fi
-#uncomment next line if wishing to always access by http://ip as the root
-#sudo sed -i "s:root /var/www;:root /var/www$rpicamdirEsc;:g" $aconf 
+sudo sed -i "s:root /var/www;:root /var/www$rpicamdirEsc;:g" $aconf
 sudo mv /etc/nginx/sites-available/*default* etc/nginx/sites-available/ >/dev/null 2>&1
 #remove link file as nginx now errors if link invalid
 sudo rm /etc/nginx/sites-enabled/*default* >/dev/null 2>&1
@@ -241,14 +257,9 @@ else
    sed -i "s/auth_basic\ .*/auth_basic \"Restricted\";/g" $aconf
    sed -i "s/#auth_basic_user_file/\ auth_basic_user_file/g" $aconf
 fi
-if [[ "$phpversion" == "7.4" ]]; then
-   sed -i "s/\/var\/run\/php5-fpm\.sock;/\/run\/php\/php7.4-fpm\.sock;/g" $aconf
-elif [[ "$phpversion" == "7.3" ]]; then
-   sed -i "s/\/var\/run\/php5-fpm\.sock;/\/run\/php\/php7.3-fpm\.sock;/g" $aconf
-fi
+# Replace legacy php5-fpm socket with the correct versioned socket for any PHP version
+sed -i "s|/var/run/php5-fpm\.sock|/run/php/php${phpversion}-fpm.sock|g" $aconf
 sudo sed -i -E "s/(listen.+?)80/\1$webport/g" $aconf
-# following line sets root url to direct subfolder. This is inconsistent with other usage.
-#sudo sed -i -E "s/root \/var\/www/root \/var\/www$rpicamdirEsc/" $aconf
 sudo mv $aconf /$aconf
 sudo chmod 644 /$aconf
 if [ ! -e /etc/nginx/sites-enabled/rpicam ]; then
@@ -264,11 +275,7 @@ if [ "$NGINX_DISABLE_LOGGING" != "" ]; then
 fi
 
 # Configure php-apc
-if [[ "$phpversion" == "7.3" ]]; then
-	phpnv=/etc/php/7.3
-else
-	phpnv=/etc/php/$phpversion
-fi
+phpnv=/etc/php/$phpversion
 sudo sh -c "echo \"cgi.fix_pathinfo = 0;\" >> $phpnv/fpm/php.ini"
 sudo mkdir $phpnv/conf.d >/dev/null 2>&1
 sudo cp etc/php5/apc.ini $phpnv/conf.d/20-apc.ini
@@ -317,6 +324,11 @@ sudo chmod 664 /etc/motion/motion.conf
 
 fn_autostart ()
 {
+# Create /etc/rc.local if absent (not present by default on Debian 12+)
+if [ ! -f /etc/rc.local ]; then
+   sudo bash -c 'printf "#!/bin/sh -e\n\nexit 0\n" > /etc/rc.local'
+   sudo chmod 755 /etc/rc.local
+fi
 tmpfile=$(mktemp)
 sudo sed '/#START/,/#END/d' /etc/rc.local > "$tmpfile" && sudo mv "$tmpfile" /etc/rc.local
 # Remove to growing plank lines.
@@ -329,7 +341,11 @@ if [ "$autostart" == "yes" ]; then
 mkdir -p /dev/shm/mjpeg
 chown www-data:www-data /dev/shm/mjpeg
 chmod 777 /dev/shm/mjpeg
-sleep 4;su -c 'raspimjpeg > /dev/null 2>&1 &' www-data
+if [ "\$(uname -m)" = "aarch64" ] || grep -q 'usb_cam="yes"' $(dirname $(readlink -f $0))/config.txt 2>/dev/null; then
+  sleep 4;bash $(dirname $(readlink -f $0))/usb_cam.sh start > /dev/null 2>&1
+else
+  sleep 4;su -c 'raspimjpeg > /dev/null 2>&1 &' www-data
+fi
 if [ -e /etc/debian_version ]; then
   sleep 4;su -c 'php /var/www$rpicamdir/schedule.php > /dev/null 2>&1 &' www-data
 else
@@ -367,25 +383,27 @@ if [ -e /var/www$rpicamdir/index.html ]; then
    sudo rm /var/www$rpicamdir/index.html
 fi
 
-if [[ "$phpversion" == "7.3" ]]; then
-   phpv=php7.3
-else
-   phpv=php$phpversion
-fi
+phpv=php$phpversion
 
 if [ "$webserver" == "apache" ]; then
-   sudo apt-get install -y apache2 $phpv $phpv-cli libapache2-mod-$phpv gpac motion zip gstreamer1.0-tools
+   sudo apt-get install -y apache2 $phpv $phpv-cli libapache2-mod-$phpv motion zip gstreamer1.0-tools
    if [ $? -ne 0 ]; then exit; fi
    fn_apache
 elif [ "$webserver" == "nginx" ]; then
-   sudo apt-get install -y nginx $phpv-fpm $phpv-cli $phpv-common php-apcu apache2-utils gpac motion zip gstreamer1.0-tools
+   sudo apt-get install -y nginx $phpv-fpm $phpv-cli $phpv-common php-apcu apache2-utils motion zip gstreamer1.0-tools
    if [ $? -ne 0 ]; then exit; fi
    fn_nginx
 elif [ "$webserver" == "lighttpd" ]; then
-   sudo apt-get install -y  lighttpd $phpv-cli $phpv-common $phpv-cgi $phpv gpac motion zip gstreamer1.0-tools
+   sudo apt-get install -y lighttpd $phpv-cli $phpv-common $phpv-cgi $phpv motion zip gstreamer1.0-tools
    if [ $? -ne 0 ]; then exit; fi
    fn_lighttpd
 fi
+
+# Install ffmpeg and v4l-utils (USB camera support; ffmpeg also replaces gpac/MP4Box)
+sudo apt-get install -y ffmpeg v4l-utils || true
+
+# Try gpac (provides MP4Box); not available on Debian 12+ but kept for older systems
+sudo apt-get install -y gpac 2>/dev/null || true
 
 #Make sure user www-data has bash shell
 sudo sed -i "s/^www-data:x.*/www-data:x:33:33:www-data:\/var\/www:\/bin\/bash/g" /etc/passwd
@@ -453,6 +471,15 @@ sudo usermod -a -G video www-data
 if [ -e /var/www$rpicamdir/uconfig ]; then
    sudo chown www-data:www-data /var/www$rpicamdir/uconfig
 fi
+
+# Install usb_cam.sh to a fixed location so the web interface can call it,
+# and store config.txt in /etc/rpi_cam_web_interface/ so the script finds it.
+SRCDIR="$(dirname "$(readlink -f "$0")")"
+sudo mkdir -p /etc/rpi_cam_web_interface
+sudo cp "$SRCDIR/config.txt" /etc/rpi_cam_web_interface/config.txt
+sudo chmod 644 /etc/rpi_cam_web_interface/config.txt
+sudo cp "$SRCDIR/usb_cam.sh" /usr/local/bin/usb_cam.sh
+sudo chmod 755 /usr/local/bin/usb_cam.sh
 
 fn_motion
 fn_autostart
